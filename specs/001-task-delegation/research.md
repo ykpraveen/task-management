@@ -56,18 +56,22 @@
 
 ### Spring business services and gateway
 
-- **Decision**: Java 21 LTS, Spring Boot task API and notification service/worker,
+- **Decision**: Java 25 LTS, Spring Boot task API and notification service/worker,
   Spring Cloud Gateway Server WebFlux. Use MVC/JDBC in the business services.
 - **Rationale**: User preference; gateway handles routing/security transport, not task rules.
-  Blocking PostgreSQL transactions stay out of the reactive gateway.
+  Blocking PostgreSQL transactions stay out of the reactive gateway. Java 25 is the
+  selected language, compilation target, and service/test runtime.
 - **Alternatives considered**: Fastify/TypeScript, FastAPI, .NET; no gateway.
-- **Compatibility baseline**: Boot 4.1.2 supports Java 21. Cloud's documented 2025.1
+- **Compatibility baseline**: Spring Boot 4.1.2 requires at least Java 17 and documents
+  compatibility through Java 27, which includes Java 25. Cloud's documented 2025.1
   train supports Boot 4.1 from 2025.1.2; use the compatible train's service-release BOM,
   not independently chosen Spring component versions. Research returned 2025.1.4 as
-  a candidate; verify the exact available patch at dependency scaffolding.
+  a candidate; verify exact BOM availability and the Java 25 Maven/compiler/container
+  toolchain at dependency scaffolding.
 - **Sources**: https://docs.spring.io/spring-boot/system-requirements.html ;
   https://spring.io/projects/spring-cloud ;
-  https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/global-filters.html
+  https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/global-filters.html ;
+  https://maven.apache.org/guides/mini/guide-using-toolchains.html
 - **Caveat**: Proxy Supabase's WebSocket route through the actual Spring and Supabase
   gateways; preserve required query/upgrade/heartbeat behavior and redact credentials.
   Keep the server publishing endpoint internal; it is not a browser write capability.

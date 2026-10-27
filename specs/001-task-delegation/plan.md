@@ -23,13 +23,13 @@ coordinator is required for this single-instance local demo.
 
 ## Technical Context
 
-**Language/Version**: Java 21 LTS; TypeScript with strict checking; Node.js 24 LTS for frontend build/test tooling only, not a custom live-delivery runtime.
+**Language/Version**: Java 25 LTS for all Java services and their build/test runtime; TypeScript with strict checking; Node.js 24 LTS for frontend build/test tooling only, not a custom live-delivery runtime.
 
-**Primary Dependencies**: Spring Boot 4.1.2; compatible Spring Cloud 2025.1.x BOM
+**Primary Dependencies**: Spring Boot 4.1.2 on Java 25; compile with Java release 25 and run service/test containers on JDK 25. Compatible Spring Cloud 2025.1.x BOM
 (research baseline 2025.1.4; verify availability and compatibility when generating builds);
 Gateway Server WebFlux; Spring Security resource servers; Spring MVC/JDBC for business
 services; Flyway; React; Vite; TanStack Router, Query, Form and Table; Supabase JS for Auth and Realtime.
-Use Maven Wrapper and npm workspaces/lockfile. Resolve and lock compatible frontend patches
+Use Maven Wrapper with Java 25 toolchain/release configuration and npm workspaces/lockfile. Resolve and lock compatible frontend patches
 and immutable container references at scaffolding; do not use floating image tags.
 
 **Storage**: One self-hosted Supabase PostgreSQL instance with separately owned identity
