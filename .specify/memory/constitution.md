@@ -1,15 +1,13 @@
 <!--
 Sync Impact Report (temporary review material; remove before committing):
-- Version change: unratified scaffold -> 1.0.0 (initial adoption).
-- Modified principles: five unnamed scaffold slots replaced with:
-  I. Bounded Microservices; II. Reproducible Container Environments;
-  III. Security and Privacy by Design; IV. Mandatory Vulnerability Checks;
-  V. Verifiable Contracts and Reliable Operations.
-- Added sections: Architecture and Environment Constraints;
-  Development Workflow and Quality Gates; populated Governance.
-- Removed sections: none; scaffold placeholders and examples replaced.
-- Follow-up TODOs: none. Feature artifacts must be checked against this constitution
-  during planning; they are not modified by this workflow.
+- Version change: 1.0.0 -> 1.1.0 (new mandatory JUnit testing obligations).
+- Modified principles: V. Verifiable Contracts and Reliable Operations
+  (title unchanged; explicit JUnit requirements added for Java services).
+- Modified sections: Development Workflow and Quality Gates (JUnit execution gate).
+- Added sections: none.
+- Removed sections: none.
+- Follow-up TODOs: none. Plans and tasks must incorporate the JUnit obligations
+  at their next affected review; they are not modified by this workflow.
 -->
 # Task Management Constitution
 
@@ -81,6 +79,14 @@ integration tests. Tests MUST cover relevant business rules, authorization denia
 dependency failures, and retry behavior. Changes to assignment, status, deadlines,
 notifications, or uploads MUST preserve their specified history and access controls.
 
+Every Java service MUST include automated JUnit test cases. New or changed Java behavior
+MUST have corresponding JUnit tests, including regression tests for bug fixes.
+Unit tests MUST cover business rules and boundary cases; Spring integration tests using
+JUnit MUST cover affected API contracts, authorization failures, persistence behavior,
+and dependency failure or retry paths. Database-dependent behavior MUST be tested against
+PostgreSQL rather than relying solely on mocks or an incompatible in-memory database.
+Frontend, Socket.IO, and end-to-end tests complement but MUST NOT replace Java JUnit tests.
+
 Cross-service calls MUST have explicit timeouts and visible failure handling. Retried
 mutations and deliveries MUST prevent duplicate effects. Services MUST expose health
 signals and actionable operational errors without leaking sensitive data. A successful
@@ -109,7 +115,10 @@ Breaking contract changes MUST include a compatibility or migration plan.
    any proposed exceptions before implementation.
 2. Implementation MUST include tests for changed behavior and affected service contracts.
    Contributors MUST run the smallest relevant tests, build/type checks, and required
-   security checks, then expand validation when the impact warrants it.
+   security checks, then expand validation when the impact warrants it. Java builds and
+   CI MUST execute applicable JUnit unit and integration test suites and fail on test
+   failures. Required suites MUST NOT be silently skipped; blocked execution MUST be
+   reported as incomplete validation.
 3. Before release, the composed environment MUST start successfully and pass health and
    cross-service smoke checks. Release evidence MUST include all mandatory vulnerability
    checks and any accepted exceptions.
@@ -138,4 +147,4 @@ be preserved; the last-amended date MUST reflect each adopted amendment.
 The Sync Impact Report is temporary review material, not governance, and MUST be removed
 before committing an adopted amendment.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-27 | **Last Amended**: 2026-10-27
+**Version**: 1.1.0 | **Ratified**: 2026-10-27 | **Last Amended**: 2026-10-27
