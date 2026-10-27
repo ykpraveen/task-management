@@ -1,13 +1,12 @@
 <!--
 Sync Impact Report (temporary review material; remove before committing):
-- Version change: 1.0.0 -> 1.1.0 (new mandatory JUnit testing obligations).
-- Modified principles: V. Verifiable Contracts and Reliable Operations
-  (title unchanged; explicit JUnit requirements added for Java services).
-- Modified sections: Development Workflow and Quality Gates (JUnit execution gate).
-- Added sections: none.
+- Version change: 1.1.0 -> 1.2.0 (new mandatory UI accessibility and EAA compliance principle).
+- Modified principles: none.
+- Added sections: VI. Accessible User Interfaces.
+- Modified sections: Development Workflow and Quality Gates (accessibility verification gate).
 - Removed sections: none.
-- Follow-up TODOs: none. Plans and tasks must incorporate the JUnit obligations
-  at their next affected review; they are not modified by this workflow.
+- Follow-up TODOs: none. Dependent plans and tasks must incorporate the accessibility
+  requirements at their next affected review; they are not modified by this workflow.
 -->
 # Task Management Constitution
 
@@ -93,6 +92,27 @@ signals and actionable operational errors without leaking sensitive data. A succ
 task action MUST NOT be rolled back solely because optional email delivery fails.
 Breaking contract changes MUST include a compatibility or migration plan.
 
+### VI. Accessible User Interfaces
+
+Every user interface MUST comply with the European Accessibility Act (EAA) requirements
+applicable to the service and with applicable harmonized accessibility standards, including
+EN 301 549. Web content MUST meet WCAG 2.1 Level AA at minimum. Accessibility MUST be
+considered in design, implementation, and acceptance criteria, not deferred to a final
+polish pass.
+
+All user tasks MUST be operable with a keyboard and expose visible, logical focus. Controls,
+forms, validation errors, status changes, and dynamic content MUST have programmatically
+determinable names, roles, states, and relationships that work with assistive technologies.
+Text and interactive content MUST meet required contrast, zoom, and reflow expectations.
+Information MUST NOT be conveyed by color alone. Equivalent text alternatives MUST be
+provided for meaningful non-text content.
+
+Every user-facing feature MUST receive automated accessibility checks and manual
+keyboard and screen-reader review of its core workflows. Automated tools alone MUST NOT
+be treated as proof of compliance. Accessibility defects MUST be tracked and resolved
+before release; any legal applicability assessment or exception requires documented
+maintainer approval and rationale.
+
 ## Architecture and Environment Constraints
 
 - Plans MUST document service responsibilities, data ownership, communication contracts,
@@ -115,10 +135,12 @@ Breaking contract changes MUST include a compatibility or migration plan.
    any proposed exceptions before implementation.
 2. Implementation MUST include tests for changed behavior and affected service contracts.
    Contributors MUST run the smallest relevant tests, build/type checks, and required
-   security checks, then expand validation when the impact warrants it. Java builds and
-   CI MUST execute applicable JUnit unit and integration test suites and fail on test
-   failures. Required suites MUST NOT be silently skipped; blocked execution MUST be
-   reported as incomplete validation.
+   security and accessibility checks, then expand validation when the impact warrants it.
+   User-facing changes MUST include automated accessibility checks and manual keyboard
+   and screen-reader verification of affected workflows. Java builds and CI MUST execute
+   applicable JUnit unit and integration test suites and fail on test failures. Required
+   suites MUST NOT be silently skipped; blocked execution MUST be reported as incomplete
+   validation.
 3. Before release, the composed environment MUST start successfully and pass health and
    cross-service smoke checks. Release evidence MUST include all mandatory vulnerability
    checks and any accepted exceptions.
@@ -147,4 +169,4 @@ be preserved; the last-amended date MUST reflect each adopted amendment.
 The Sync Impact Report is temporary review material, not governance, and MUST be removed
 before committing an adopted amendment.
 
-**Version**: 1.1.0 | **Ratified**: 2026-10-27 | **Last Amended**: 2026-10-27
+**Version**: 1.2.0 | **Ratified**: 2026-10-27 | **Last Amended**: 2026-10-27
