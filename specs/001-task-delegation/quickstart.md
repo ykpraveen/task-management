@@ -6,12 +6,15 @@ Run commands from the repository root after implementation.
 
 ## Prerequisites and environment
 
-Docker daemon and Docker Compose v2 with healthy Linux-container support. Start with
-16 GB available RAM/four CPU cores/80 GB disk for the complete stack and measure actual
-usage. No host Java/Node installation is needed for the planned containerized commands.
-Use synthetic accounts and files only.
+Docker daemon and Docker Compose v2 with healthy Linux-container support: native Docker on
+Linux, Docker Desktop or a compatible engine on macOS (Apple Silicon or Intel), or Docker in
+WSL on Windows. Start with 16 GB available RAM/four CPU cores/80 GB disk for the complete
+stack and measure actual usage. No host Java, Node or PowerShell installation is needed:
+setup, migrations, tests and scans run in Compose tools containers. Use synthetic accounts
+and files only. Commands are shown for POSIX shells (macOS, Linux, WSL); PowerShell
+equivalents follow where they differ.
 
-```powershell
+```sh
 docker info
 docker compose version
 ```
@@ -31,15 +34,25 @@ services automatically. Record the exact failure if neither environment is usabl
 
 ## Setup and start (implementation must provide these interfaces)
 
-```powershell
-Copy-Item .env.example .env
+```sh
+cp -n .env.example .env
 docker compose --profile tools run --rm setup
 docker compose config --quiet
 docker compose up --build --wait
 docker compose --profile tools run --rm demo-users
+docker compose --profile tools run --rm identity-reconcile --check
 docker compose ps
-curl.exe --fail http://localhost:8080/healthz
+curl --fail http://localhost:8080/healthz
 ```
+
+PowerShell: replace the first line with `if (-not (Test-Path .env)) { Copy-Item .env.example .env }`
+and use `curl.exe` instead of `curl`.
+
+`up --wait` runs, in order: Supabase services, the privileged `db-bootstrap` job (schemas,
+roles, grants, identity triggers, Realtime policies), `task-api-migrate` and
+`notifications-migrate` with owner roles, then runtime services with non-owner roles.
+A failed or incomplete job blocks dependent services with a visible error.
+`identity-reconcile --check` reports zero drift between Auth accounts and the directory.
 
 `setup` generates fresh local secrets and the selected Supabase asymmetric signing keys
 into ignored runtime files; it must not overwrite existing credentials or volumes.
@@ -59,7 +72,7 @@ Container health must distinguish required dependencies from optional email/live
 
 Email starts disabled. Optional capture profile:
 
-```powershell
+```sh
 docker compose --profile email-capture up --build --wait
 docker compose --profile tools run --rm delivery-policy email enable-capture
 ```
@@ -97,17 +110,44 @@ Only new eligible synthetic events enter capture. Use the same tool with
    channels and client sends fail. Check token refresh/expiry/key rotation on pinned images.
    Existing subscription authorization is cached; verify Spring stops publishing to inactive
    users and every HTTP read remains authorized rather than claiming instant eviction.
+9. Sign in, sign out and switch accounts in one tab. Unauthenticated deep links reach sign-in
+   and then the validated target. After sign-out, nothing from the previous account appears
+   (cache, URL filters, search, Realtime). The session survives a reload but not closing the
+   tab, and `localStorage` holds only column preferences. Change your profile time zone; a
+   date-only deadline created afterwards resolves to 23:59 in the new zone, and an invalid
+   zone is rejected without changing the stored one.
+10. Deactivate a user through user management: the directory shows them inactive in the
+   same transaction, their valid JWT is refused on the next request, and they disappear
+   from assignee search. Run `identity-reconcile --check` after deliberately desynchronizing
+   a test database and confirm it reports and repairs the drift.
+
+## Accessibility validation (FR-031, SC-017)
+
+Follow [contracts/ui-accessibility.md](contracts/ui-accessibility.md). For each story
+checkpoint and again before release:
+
+- Complete scenarios 1, 2, 4, 6, 7 and 9 using only the keyboard in Chromium, Firefox and Safari:
+  visible focus throughout, no traps, focus moves to the `h1` on navigation and returns
+  after dialogs.
+- Repeat them with VoiceOver and Safari (macOS) or NVDA and Firefox (Windows). Field
+  errors, conflicts, upload rejections and your own action outcomes are announced.
+  Background refreshes in a second session are not announced and do not move focus.
+- At 200% zoom and a 320 CSS px wide window, no content or function is lost; status, priority,
+  overdue and unread state are readable without color.
+- `test-unit` and `test-e2e` include axe-core checks and fail on any WCAG 2.1 A/AA violation.
+- Record date, browser, assistive-technology versions, findings and dispositions in
+  `evidence/accessibility.md`. Unresolved defects block release.
 
 ## Crash, persistence and delivery
 
-```powershell
+```sh
 docker compose stop notifications
 ```
 
 Make task changes and pass reminder boundaries using the test clock in automated tests.
 Task API remains usable and history/outbox persist. Then:
 
-```powershell
+```sh
 docker compose start notifications
 docker compose stop realtime
 ```
@@ -117,7 +157,7 @@ duplicates; obsolete due-soon work does not appear alongside a now-overdue remin
 With realtime stopped, inbox polling still works. Restart realtime and confirm reconnect
 reloads the inbox even if hints were missed.
 
-```powershell
+```sh
 docker compose start realtime
 docker compose down
 docker compose up --wait
@@ -129,7 +169,7 @@ explicit authorization.
 
 ## Automated validation interfaces (provided during implementation)
 
-```powershell
+```sh
 docker compose --profile test run --rm test-unit
 docker compose --profile test run --rm test-contract
 docker compose --profile test run --rm test-e2e
@@ -138,16 +178,18 @@ docker compose --profile security run --rm scan-secrets
 docker compose --profile security run --rm scan-source
 docker compose --profile security run --rm scan-dependencies
 docker compose --profile security run --rm scan-images
+docker compose --profile tools run --rm release-gate
 ```
 
 Unit command includes Java/TypeScript type/build checks; contract tests exercise real
-PostgreSQL transactions and all HTTP/event definitions. E2E uses Chromium/Firefox and
+PostgreSQL transactions and all HTTP/event definitions. E2E uses Chromium, Firefox and WebKit and
 keyboard workflows; performance seeds the SC-005 load and checks actual p95 thresholds.
 Use controllable clocks for SC-004's 100 cases; include worker kill/restart at transaction
-boundaries and SMTP-ambiguity tests. Match required outcomes in spec SC-001..SC-016,
+boundaries and SMTP-ambiguity tests. Match required outcomes in spec SC-001..SC-017,
 not merely HTTP success.
 
-Every Java service runs applicable JUnit unit/integration suites and regression cases;
+Every Java module (gateway, task API, notifications, identity tools) runs applicable JUnit
+unit/integration suites and regression cases;
 test failures block the build, skipped/unavailable required suites are incomplete validation.
 Sequence tests use real PostgreSQL: concurrent inserts, rollback gaps, generated-key
 retrieval, owned sequence permissions, foreign/event references and restart persistence.
@@ -162,10 +204,17 @@ Image scans cover all runtime images, including upstream Supabase and gateway im
 dependency scans cover Maven/npm plus transitive dependencies. Record tool versions,
 image digests, source revision, failures and exceptions. Unavailable scanners are incomplete.
 High/Critical findings require remediation or a documented maintainer-approved,
-time-limited exception. No vulnerability-free claim follows from this design document.
+time-limited exception. Triage every finding into `docs/security/findings-register.md`
+(severity, component, evidence, disposition, exception owner and expiry). `release-gate` fails
+on missing or failed scans, a stale register, or unresolved High/Critical findings without
+an unexpired exception. No vulnerability-free claim follows from this design document.
+
+CI also checks migrations: versions per service are unique and gap-free, applied files are
+unchanged, and runtime roles cannot run DDL or read another service's schema.
 
 ## Related contracts
 
 - [Data model](data-model.md)
 - [HTTP contracts](contracts/http-api.md)
 - [Durable and live delivery](contracts/delivery.md)
+- [UI accessibility](contracts/ui-accessibility.md)

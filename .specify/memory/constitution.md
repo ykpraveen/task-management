@@ -1,13 +1,14 @@
 <!--
-Sync Impact Report (temporary review material; remove before committing):
-- Version change: 1.1.0 -> 1.2.0 (new mandatory UI accessibility and EAA compliance principle).
-- Modified principles: none.
-- Added sections: VI. Accessible User Interfaces.
-- Modified sections: Development Workflow and Quality Gates (accessibility verification gate).
+- Version change: 1.2.0 -> 1.2.1 (PATCH: wording only, no change in obligations).
+- Modified principles: V. Verifiable Contracts and Reliable Operations. "Socket.IO" is replaced
+  with the technology-neutral "live-update channel"; the rule that such tests complement but
+  never replace Java JUnit tests is unchanged.
+- Added sections: none.
 - Removed sections: none.
-- Follow-up TODOs: none. Dependent plans and tasks must incorporate the accessibility
-  requirements at their next affected review; they are not modified by this workflow.
+- Follow-up TODOs: none. Feature 001 uses Supabase Realtime as its live-update channel;
+  its plan and tasks already comply.
 -->
+
 # Task Management Constitution
 
 ## Core Principles
@@ -84,7 +85,8 @@ Unit tests MUST cover business rules and boundary cases; Spring integration test
 JUnit MUST cover affected API contracts, authorization failures, persistence behavior,
 and dependency failure or retry paths. Database-dependent behavior MUST be tested against
 PostgreSQL rather than relying solely on mocks or an incompatible in-memory database.
-Frontend, Socket.IO, and end-to-end tests complement but MUST NOT replace Java JUnit tests.
+Frontend, live-update channel, and end-to-end tests complement but MUST NOT replace Java JUnit
+tests.
 
 Cross-service calls MUST have explicit timeouts and visible failure handling. Retried
 mutations and deliveries MUST prevent duplicate effects. Services MUST expose health
@@ -166,7 +168,4 @@ redefinitions, MINOR for new principles or materially expanded obligations, and 
 for clarifications that do not change obligations. The original ratification date MUST
 be preserved; the last-amended date MUST reflect each adopted amendment.
 
-The Sync Impact Report is temporary review material, not governance, and MUST be removed
-before committing an adopted amendment.
-
-**Version**: 1.2.0 | **Ratified**: 2026-10-27 | **Last Amended**: 2026-10-27
+**Version**: 1.2.1 | **Ratified**: 2026-10-27 | **Last Amended**: 2026-10-28

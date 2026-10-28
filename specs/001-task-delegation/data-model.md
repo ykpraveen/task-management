@@ -40,11 +40,29 @@ Stable user UUID references and task bigint references preserve history after de
 identity deletion is soft in the projection while referenced. A shared physical PostgreSQL
 instance is not permission to join/mutate another service's business tables.
 
+## Schema and migration ownership
+
+| Schema | Owner role (migrations) | Runtime role | Migrated by |
+|--------|-------------------------|--------------|-------------|
+| `identity` | `identity_owner` | none (read-only contract grants to task/notification runtime roles) | `db-bootstrap` job |
+| `task` | `task_owner` | `task_app` | `task-api-migrate` job |
+| `notification` | `notification_owner` | `notification_app` | `notifications-migrate` job |
+| Realtime policies on `realtime.messages` | Supabase administrator | n/a | `db-bootstrap` job |
+
+Roles, schemas, default privileges and cross-schema grants are created only by the
+privileged bootstrap job. Each service has its own Flyway history table in its own schema.
+Versions are per service and assigned at merge time; see plan.md.
+
 ## Identity-owned directory
 
-**DirectoryUser**: `user_id` (Auth stable UUID, unique), `display_name`, `email`,
-`active`, `time_zone`, `updated_at`. User management maintains this automatically, including
-creation, activation/deactivation and profile changes. Read-only views/operations expose
+**DirectoryUser**: `user_id` (Auth stable UUID, unique), `display_name` (1..200, defaults to
+the email local part), `email`, `active`, `time_zone` (IANA name present in
+`pg_timezone_names`, default `DEFAULT_TIME_ZONE`), `deleted` (soft-delete flag), `updated_at`.
+User management maintains it automatically through identity-owned `auth.users` triggers in
+the same transaction, covering creation, activation/deactivation and profile changes. `active` is
+false when the Auth user is banned, deleted or unconfirmed; only server-controlled Auth fields
+affect it. `display_name` and `time_zone` come from user-editable metadata; an invalid
+zone keeps the previous value. The `tools/identity reconcile` command repairs drift. Read-only views/operations expose
 only necessary directory fields to task/notification services. No task-specific enrollment.
 Names/email are not ownership keys; activation cannot derive from user-editable metadata.
 Identity-owned Realtime authorization helper checks only the verified `auth.uid()` activity
