@@ -3,7 +3,7 @@
 **Branch**: `develop` (existing branch; no feature branch created) | **Date**: 2026-10-27
 **Spec**: [spec.md](spec.md)
 
-**Input**: `specs\001-task-delegation\spec.md`, constitution v1.1.0, and collaborative
+**Input**: `specs\001-task-delegation\spec.md`, constitution v1.2.0, and collaborative
 planning decisions recorded in [research.md](research.md).
 
 ## Summary
@@ -41,11 +41,16 @@ strings throughout HTTP/Broadcast/TypeScript to avoid precision loss; see data-m
 
 **Testing**: JUnit 5, Spring integration tests, PostgreSQL integration/contract tests,
 Vitest/Testing Library, Playwright with isolated browser accounts, private Broadcast integration tests,
-and k6 performance scenarios. Semgrep, dependency checks, Gitleaks, and Trivy cover the
+axe-core accessibility checks in frontend tests, and k6 performance scenarios. Semgrep,
+dependency checks, Gitleaks, and Trivy cover the
 constitution's security gates. Tests and scanners run in Compose tool profiles where useful.
-Every Java service includes JUnit unit and Spring integration cases, with bug-fix regression
-tests and PostgreSQL-backed persistence tests. CI executes applicable suites and fails on
-failures; frontend/E2E tests do not replace JUnit coverage (constitution v1.1.0).
+Every Java service, including the Spring Cloud Gateway, includes JUnit unit and applicable
+Spring integration cases, with bug-fix regression tests and PostgreSQL-backed persistence
+tests where it owns database behavior. Gateway coverage exercises route allowlists,
+authentication/rate-limit behavior, origin checks, and WebSocket upgrades. CI executes
+applicable suites and fails on failures; frontend/E2E tests do not replace JUnit coverage.
+Core user workflows also receive manual keyboard and screen-reader review; accessibility
+defects are tracked and resolved before release (constitution v1.2.0).
 
 **Target Platform**: Local Linux containers through native Docker or Docker in Windows WSL;
 desktop Chromium and Firefox, responsive layout and keyboard-operable core workflows.
@@ -83,7 +88,8 @@ to implementation, not claimed here.*
 | Reproducible containers | Root Compose includes frontend, Java services, required Supabase topology including Realtime, migrations, and optional tooling/capture profiles. No custom Node delivery service. Pin images; health-check dependencies; preserve volumes; document native/WSL paths. |
 | Security/privacy | JWT validation and active-user checks in each boundary, least-privilege SQL roles, task authorization on every content/download request, local-only administration, private storage, abuse-case tests. |
 | Vulnerability checks | Source, dependency, secret, and image scans are required. High/Critical block merge/release absent a constitution-compliant exception; scanner failures are incomplete, not passes. |
-| Contracts/reliability | Versioned HTTP/event contracts, task/outbox transactions, leased claims, idempotent inbox insertion, push-as-hint semantics, bounded retries and recovery tests. JUnit unit/integration/regression cases in every Java service; real PostgreSQL persistence tests and mandatory CI execution per v1.1.0. |
+| Contracts/reliability | Versioned HTTP/event contracts, task/outbox transactions, leased claims, idempotent inbox insertion, push-as-hint semantics, bounded retries and recovery tests. JUnit unit/integration/regression cases in every Java service, including Gateway route/security/WebSocket tests; real PostgreSQL persistence tests and mandatory CI execution per v1.2.0. |
+| Accessible user interfaces | WCAG 2.1 AA is a design and acceptance constraint. Frontend CI runs axe-core checks on core workflows, and release validation includes manual keyboard and screen-reader review with defects tracked to resolution. |
 
 Supabase is self-hosted here; the constitution's managed-service example is not a hosting
 mandate. No governance exception is requested. SMTP capture is a demo integration only:
@@ -309,10 +315,14 @@ identity. Keep configured limits shared/testable; no Redis is needed for single-
 demo counters. Do not silently drop work on retry exhaustion: retain failed work, expose
 safe operational metrics, and provide an explicit replay operation.
 
-CI checks contracts, Java/TypeScript builds, targeted suites, secrets, source analysis,
-Maven/npm dependencies, Compose config, and all pinned runtime images. Before release,
+CI checks contracts, Java/TypeScript builds, targeted suites (including Gateway JUnit and
+automated axe-core accessibility checks), secrets, source analysis, Maven/npm dependencies,
+Compose config, and all pinned runtime images. Before release,
 run composed smoke, restart, scanner, and load scenarios. Record failed/unavailable gates.
 Scans have not been executed by this planning workflow.
+Complete and record manual keyboard and screen-reader review of the core create/assign,
+task-update, comment/attachment, list-navigation, and notification workflows before release;
+track accessibility defects and resolve them before release.
 Add frontend cases for field/form error mapping, dirty conflict preservation, AbortSignal,
 late responses after account switching, pending/failed completion, targeted invalidation,
 cursor resets, Back/Forward, copied URLs, column preferences and no private browser persistence.
@@ -322,7 +332,9 @@ and missed-event recovery must work through the actual gateway.
 
 ## Complexity Tracking
 
-No constitution violations. Spring gateway remains user-selected; Supabase Realtime replaces
+No constitution violations are identified by this design; the explicit automated and manual
+accessibility gates and Gateway JUnit coverage above are implementation requirements, not
+completed validation evidence. Spring gateway remains user-selected; Supabase Realtime replaces
 custom Node delivery and contains no task rules. Required receive-only RLS/tenant setup is
 an explicit cost of that simplification. PostgreSQL replaces an additional broker only at the demo's agreed scale.
 Production scaling, remote TLS termination, and real-email provider selection remain

@@ -41,6 +41,7 @@ description: "Implementation tasks for Private Task Delegation"
 - [ ] T018 Create the React/Vite application shell and configure TanStack Router, Query, Form, and Table in `apps\web\src\main.tsx` and `apps\web\src\app.tsx`
 - [ ] T019 [P] Configure shared service error mapping, structured redacted logging, liveness/readiness probes, and non-sensitive operational metrics in `services\task-api\src\main\java\com\example\tasks\operations\` and `services\notifications\src\main\java\com\example\notifications\operations\`
 - [ ] T020 [P] Add Java 25 PostgreSQL-backed JUnit and Spring integration, Vitest/Testing Library, and Playwright test profiles and commands in `pom.xml`, `package.json`, and `compose.yaml`
+- [ ] T087 [P] Add Gateway JUnit unit and Spring integration tests for route allowlists, authentication and rate limits, origin checks, query-string redaction, and WebSocket upgrades, and ensure the CI test command executes them in `services\gateway\src\test\java\com\example\gateway\`
 
 **Checkpoint**: Shared build, identity, security, API conventions, and database foundations are available before story implementation.
 
@@ -177,9 +178,10 @@ description: "Implementation tasks for Private Task Delegation"
 - [ ] T081 [P] Document native Docker and Windows WSL prerequisites, setup, startup, health, demo flows, email capture, safe restart, and limitations in `README.md`
 - [ ] T082 Add Compose startup ordering, migration completion checks, health dependencies, persistent storage, local-only admin bindings, and application profiles in `compose.yaml`
 - [ ] T083 [P] Add performance fixtures and k6 scenarios for 1,000 tasks per user, 50 concurrent employees, and the two-second p95 list/search/detail threshold in `tests\performance\task-management.js`
-- [ ] T084 [P] Add security scanner profiles and CI checks for Java/TypeScript builds, JUnit, PostgreSQL integration, secret detection, source analysis, Maven/npm dependencies, and pinned runtime images in `.github\workflows\ci.yml`
+- [ ] T084 [P] Add security scanner profiles and CI checks for Java/TypeScript builds, JUnit (including Gateway tests), PostgreSQL integration, automated axe-core accessibility checks for core frontend workflows, secret detection, source analysis, Maven/npm dependencies, and pinned runtime images in `.github\workflows\ci.yml`
 - [ ] T085 Run the full quickstart acceptance matrix, including Compose recreation persistence, sequence IDs above 2^53-1, all user journeys, worker crashes, reminder clock cases, Realtime authorization, and disabled-email recovery; record commands/results in `specs\001-task-delegation\quickstart.md`
 - [ ] T086 Verify the implementation against every FR-001..FR-030 and SC-001..SC-016, record unavailable/failed validation gates, and resolve outstanding cross-service contract gaps in `specs\001-task-delegation\checklists\requirements.md`
+- [ ] T088 Complete and record manual keyboard and screen-reader review of the core create/assign, task-update, comment/attachment, list-navigation, and notification workflows; track accessibility defects and resolve them before release in `specs\001-task-delegation\checklists\accessibility.md`
 
 ---
 
@@ -202,12 +204,12 @@ description: "Implementation tasks for Private Task Delegation"
 ### Parallel Opportunities
 
 - Setup: T002-T005, T007-T008 after T001 can be developed in parallel where file ownership does not overlap.
-- Foundation: T009, T012, T014, T016, T019, and T020 are separable; database schemas and shared contract/client scaffolding must be agreed before dependent service code.
+- Foundation: T009, T012, T014, T016, T019, T020, and T087 are separable; database schemas and shared contract/client scaffolding must be agreed before dependent service code.
 - US1: T021-T024 tests can be authored in parallel; T025/T026 persistence and T031 directory adapter are separable before service integration; frontend API hooks and service tests can proceed alongside backend implementation.
 - US2: T040-T042 tests are parallel; comment implementation and attachment validation/storage implementation are separable before controller integration.
 - US3: US2 and US3 can proceed in parallel after US1; T050-T053 tests are parallel; backend query and frontend URL/table work are separable after shared query contract agreement.
 - US4: T061-T066 test suites and T067/T071 service-owned migrations can proceed in parallel; task-side delivery and notification-side consumption work are independently owned behind the delivery contract.
-- Polish: T080, T081, T083, and T084 can proceed in parallel; run T085/T086 after implementation and required services are available.
+- Polish: T080, T081, T083, T084, and T088 can proceed in parallel; run T085/T086 after implementation and required services are available. T088 is a release gate and requires the implemented core workflows.
 
 ### Parallel Examples by User Story
 
@@ -263,4 +265,5 @@ After foundation, one implementer can extend US1 while another prepares US2 test
 - Every task uses the required `- [ ] Tnnn [P?] [US?] Description with file path` checklist form; setup/foundation/polish tasks omit story labels.
 - [P] marks tasks that can proceed independently without editing the same files or relying on incomplete work.
 - JUnit unit and PostgreSQL/Spring integration coverage is included because it is required by the project constitution and implementation plan; frontend and end-to-end suites complement but do not replace it.
+- T087 supplies the required Java test coverage for the Gateway service; T084 and T088 cover the constitution's automated and manual accessibility gates.
 - IDs remain PostgreSQL `bigint` in storage/Java `Long` and canonical positive decimal strings in all JSON, URLs, cursors, and Broadcast payloads.
