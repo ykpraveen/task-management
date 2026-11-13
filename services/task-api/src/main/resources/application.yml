@@ -1,0 +1,73 @@
+server:
+  port: 8080
+  shutdown: graceful
+  error:
+    whitelabel:
+      enabled: false
+    include-stacktrace: never
+    include-message: never
+spring:
+  application:
+    name: task-api
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://db:5432/postgres}
+    username: ${SPRING_DATASOURCE_USERNAME:task_app}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    hikari:
+      maximum-pool-size: 20
+      connection-timeout: 5000
+  flyway:
+    # Runtime role has no DDL; migrations run only in the `migrate` profile.
+    enabled: false
+  servlet:
+    multipart:
+      max-file-size: 10000000
+      # File limit plus a bounded multipart overhead.
+      max-request-size: 10100000
+      file-size-threshold: 1MB
+  mvc:
+    problemdetails:
+      enabled: true
+management:
+  server:
+    # Private probes and metrics: not routed by the gateway or edge.
+    port: 8081
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+logging:
+  structured:
+    format:
+      console: logstash
+  level:
+    root: info
+    # Never log request bodies, SQL parameters or headers.
+    org.springframework.web: warn
+    org.springframework.jdbc: warn
+auth:
+  issuer: ${AUTH_ISSUER:http://localhost:8080/auth/v1}
+  audience: ${AUTH_AUDIENCE:authenticated}
+  jwks-uri: ${AUTH_JWKS_URI:http://auth:9999/.well-known/jwks.json}
+internal:
+  callers:
+    notifications:
+      token: ${INTERNAL_NOTIFICATIONS_TOKEN:}
+      scopes: [outbox, reminders, authorization]
+    operator:
+      token: ${OPERATOR_TOKEN:}
+      scopes: [operator]
+tasks:
+  default-time-zone: ${DEFAULT_TIME_ZONE:UTC}
+storage:
+  url: ${STORAGE_URL:http://api-gw:8000/storage/v1}
+  bucket: ${STORAGE_BUCKET:task-attachments}
+  secret-key: ${SUPABASE_SECRET_KEY:}

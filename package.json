@@ -1,0 +1,29 @@
+{
+  "name": "task-management",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/api-client",
+    "apps/web"
+  ],
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "build": "npm run build --workspace packages/api-client && npm run build --workspace apps/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "generate:api": "npm run generate --workspace packages/api-client",
+    "test:unit": "npm run test --workspaces --if-present",
+    "test:a11y": "npm run test --workspace apps/web -- src/a11y src/auth",
+    "test:e2e": "playwright test --config tests/e2e/playwright.config.ts",
+    "test:e2e:chromium": "playwright test --config tests/e2e/playwright.config.ts --project chromium",
+    "test:e2e:firefox": "playwright test --config tests/e2e/playwright.config.ts --project firefox",
+    "test:e2e:webkit": "playwright test --config tests/e2e/playwright.config.ts --project webkit",
+    "test:contract": "playwright test --config tests/contract/playwright.config.ts"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.64.1",
+    "typescript": "5.9.3"
+  }
+}

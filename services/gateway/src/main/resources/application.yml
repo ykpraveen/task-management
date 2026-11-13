@@ -1,0 +1,80 @@
+server:
+  port: 8080
+  shutdown: graceful
+  # Never derive scheme, host or client identity from client-supplied forwarding headers.
+  forward-headers-strategy: none
+spring:
+  application:
+    name: gateway
+  cloud:
+    gateway:
+      server:
+        webflux:
+          # Do not add X-Forwarded-*/Forwarded; ClientHeaderStripping removes client-supplied ones.
+          x-forwarded:
+            enabled: false
+          forwarded:
+            enabled: false
+          httpclient:
+            connect-timeout: 5000
+            # Covers 10 MB uploads and Range downloads; WebSocket sessions are not affected.
+            response-timeout: 60s
+            # Wiretaps would log headers, bodies and WebSocket frames.
+            wiretap: false
+          httpserver:
+            wiretap: false
+          # Allowlist only: no catch-all route and no /internal/** route. Unmatched paths are 404.
+          routes:
+            # Supabase Auth, including the public signing-key path /auth/v1/.well-known/jwks.json.
+            - id: supabase-auth
+              uri: ${SUPABASE_GATEWAY_URL:http://api-gw:8000}
+              predicates:
+                - Path=/auth/v1/**
+            - id: task-api
+              uri: ${TASK_API_URL:http://task-api:8080}
+              predicates:
+                - Path=/api/v1/tasks,/api/v1/tasks/**,/api/v1/users,/api/v1/users/**
+            - id: notifications
+              uri: ${NOTIFICATIONS_URL:http://notifications:8080}
+              predicates:
+                - Path=/api/v1/notifications,/api/v1/notifications/**
+            # Realtime client route only; the Supabase gateway rewrites it to /socket/websocket.
+            # The http scheme is switched to ws for the upgrade; plain requests do not match.
+            - id: supabase-realtime
+              uri: ${SUPABASE_GATEWAY_URL:http://api-gw:8000}
+              predicates:
+                - Path=/realtime/v1/websocket
+                - Header=Upgrade, (?i)websocket
+management:
+  server:
+    # Private probes: not routed by the gateway or edge.
+    port: 8081
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+logging:
+  structured:
+    format:
+      console: logstash
+  level:
+    root: info
+    # Access lines come from AccessLogFilter (path only, no query string or frames).
+    org.springframework.cloud.gateway: warn
+    org.springframework.web: warn
+    reactor.netty: warn
+auth:
+  issuer: ${AUTH_ISSUER:http://localhost:8080/auth/v1}
+  audience: ${AUTH_AUDIENCE:authenticated}
+  jwks-uri: ${AUTH_JWKS_URI:http://auth:9999/.well-known/jwks.json}
+gateway:
+  allowed-origin: ${ALLOWED_ORIGIN:http://localhost:8080}
+  rate-limits:
+    api-per-minute: 120
+    user-search-per-minute: 30
+    realtime-connections-per-minute: 10

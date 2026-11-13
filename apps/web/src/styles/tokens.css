@@ -1,0 +1,49 @@
+/*
+ * Design tokens. Pairs are contrast-checked in src/a11y/primitives.test.tsx:
+ * text on --color-bg / --color-surface ≥ 4.5:1; borders, focus and state indicators ≥ 3:1.
+ * Color is never the only carrier of state (status, priority, overdue and unread are text).
+ */
+:root {
+  color-scheme: light dark;
+
+  --color-bg: #ffffff;
+  --color-surface: #f5f6f8;
+  --color-text: #1a1a1a;
+  --color-text-muted: #545b66;
+  --color-border: #767d88;
+  --color-focus: #0b57d0;
+  --color-link: #0b57d0;
+  --color-accent: #0b57d0;
+  --color-on-accent: #ffffff;
+  --color-danger: #b3261e;
+  --color-success: #146c2e;
+  --color-warning: #8a5300;
+  --color-backdrop: rgb(0 0 0 / 0.55);
+
+  --focus-ring-width: 3px;
+  --focus-ring-offset: 2px;
+  --radius: 4px;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 1rem;
+  --space-4: 1.5rem;
+  --font-body: system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #121417;
+    --color-surface: #1d2025;
+    --color-text: #f1f3f5;
+    --color-text-muted: #b7bdc6;
+    --color-border: #8b929c;
+    --color-focus: #8ab4f8;
+    --color-link: #8ab4f8;
+    --color-accent: #8ab4f8;
+    --color-on-accent: #121417;
+    --color-danger: #f2b8b5;
+    --color-success: #8fd19e;
+    --color-warning: #f5c26b;
+    --color-backdrop: rgb(0 0 0 / 0.7);
+  }
+}

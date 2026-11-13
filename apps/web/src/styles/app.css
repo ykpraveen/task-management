@@ -1,0 +1,285 @@
+/* Shell and primitive styles. Colors come only from tokens.css (contrast-checked). */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  line-height: 1.5;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+a {
+  color: var(--color-link);
+}
+
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.skip-link {
+  position: absolute;
+  left: 0.5rem;
+  top: -100vh;
+  padding: 0.5rem 1rem;
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 2px solid var(--color-text);
+  z-index: 100;
+}
+
+.skip-link:focus {
+  top: 0.5rem;
+}
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.app-name {
+  margin: 0;
+  font-weight: 700;
+}
+
+.app-header nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+main {
+  padding: 1rem;
+  max-width: 80rem;
+}
+
+main:focus,
+main h1:focus {
+  outline: none;
+}
+
+main h1:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.required-marker {
+  color: var(--color-text-muted);
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+input,
+select,
+textarea {
+  max-width: 100%;
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+[aria-invalid='true'] {
+  border: 2px solid var(--color-danger);
+}
+
+button {
+  padding: var(--space-1) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+button.primary {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  border-color: var(--color-accent);
+}
+
+.field-error {
+  color: var(--color-danger);
+}
+
+/* Dialog */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3);
+  background: var(--color-backdrop);
+  z-index: 50;
+}
+
+.dialog {
+  width: min(36rem, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: var(--space-4);
+  background: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.dialog-title {
+  margin-top: 0;
+}
+
+.dialog-title:focus {
+  outline: none;
+}
+
+/* Combobox */
+.combobox {
+  position: relative;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.combobox-listbox {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+}
+
+.combobox-option {
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+}
+
+.combobox-option.is-active {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+
+.combobox-option-detail,
+.combobox-status {
+  color: var(--color-text-muted);
+}
+
+.combobox-status {
+  margin: 0;
+  min-height: 1.5em;
+}
+
+/* Error summary */
+.error-summary {
+  padding: var(--space-3);
+  border: 3px solid var(--color-danger);
+  border-radius: var(--radius);
+}
+
+.error-summary-title {
+  margin-top: 0;
+  font-size: 1.25rem;
+}
+
+.error-summary a {
+  color: var(--color-danger);
+}
+
+/* State text: color supplements the text label, never replaces it. */
+.status-blocked,
+.overdue-text {
+  color: var(--color-danger);
+  font-weight: 700;
+}
+
+.status-done {
+  color: var(--color-success);
+}
+
+.priority-high {
+  color: var(--color-warning);
+  font-weight: 700;
+}
+
+.unread-text {
+  font-weight: 700;
+}
+
+/* Forms */
+.stack {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 32rem;
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.field-hint {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.field-error {
+  margin: 0;
+}
+
+/* Account controls in the header */
+.account {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-inline-start: auto;
+}
+
+.notice {
+  margin-block-end: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.notice p {
+  margin-block-start: 0;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}

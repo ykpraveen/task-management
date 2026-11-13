@@ -1,0 +1,19 @@
+# migrate mode (`entrypoint.sh migrate`): runs this service's Flyway migrations with its
+# owner role and exits. Runtime containers never run DDL.
+spring:
+  main:
+    web-application-type: none
+  datasource:
+    username: ${MIGRATE_USERNAME:notification_owner}
+    password: ${MIGRATE_PASSWORD:}
+    hikari:
+      maximum-pool-size: 2
+  flyway:
+    enabled: true
+    schemas: notification
+    default-schema: notification
+    create-schemas: false
+    table: flyway_schema_history
+    out-of-order: false
+    validate-migration-naming: true
+    locations: classpath:db/migration

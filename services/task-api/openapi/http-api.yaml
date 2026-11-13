@@ -1,0 +1,1184 @@
+openapi: 3.1.0
+info:
+  title: Task API
+  version: 1.0.0
+  description: >
+    Public task API (specs/001-task-delegation/contracts/http-api.md, "Task API"). Every call
+    requires a Supabase user bearer token and current creator/assignee access to task content.
+    The internal /internal/v1 surface is not public and is not described here.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: users
+  - name: tasks
+  - name: comments
+  - name: history
+  - name: attachments
+  - name: deadline-requests
+
+paths:
+  /users:
+    get:
+      tags: [users]
+      operationId: searchUsers
+      summary: Search active directory identities
+      parameters:
+        - name: query
+          in: query
+          required: true
+          description: Case-insensitive name/email substring, trimmed 1..200 characters. Empty=422.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/Limit'
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Active identities only; no results is an empty list.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPage'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+
+  /tasks:
+    get:
+      tags: [tasks]
+      operationId: listTasks
+      summary: List the caller's assigned or created tasks
+      description: >
+        Filters are ANDed. noDeadline is mutually exclusive with dueFrom/dueTo. Null deadlines
+        sort last in either direction; ties break on (createdAt, id). Search, filter and sort
+        are bound to the cursor; changing them requires a new first page. Unknown or
+        conflicting filters return 422.
+      parameters:
+        - name: view
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/TaskView'
+        - name: query
+          in: query
+          required: false
+          description: Free-text title/description search, 1..200 characters. Never stored in page URLs.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - name: status
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/TaskStatus'
+        - name: priority
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/Priority'
+        - name: assigneeId
+          in: query
+          required: false
+          schema:
+            $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/UserId'
+        - name: dueFrom
+          in: query
+          required: false
+          description: Inclusive calendar date in the viewer's selected time zone.
+          schema:
+            type: string
+            format: date
+        - name: dueTo
+          in: query
+          required: false
+          description: Inclusive calendar date in the viewer's selected time zone.
+          schema:
+            type: string
+            format: date
+        - name: noDeadline
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [dueAsc, dueDesc]
+            default: dueAsc
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/Limit'
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: One page of tasks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskPage'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+    post:
+      tags: [tasks]
+      operationId: createTask
+      summary: Create and assign a task
+      parameters:
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreate'
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              $ref: '../../../packages/api-client/openapi/common.yaml#/components/headers/Location'
+            ETag:
+              $ref: '../../../packages/api-client/openapi/common.yaml#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '409':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Conflict'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+
+  /tasks/{id}:
+    parameters:
+      - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/TaskId'
+    get:
+      tags: [tasks]
+      operationId: getTask
+      summary: Get a task (creator or assignee)
+      responses:
+        '200':
+          description: The task
+          headers:
+            ETag:
+              $ref: '../../../packages/api-client/openapi/common.yaml#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '404':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/NotFound'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+    patch:
+      tags: [tasks]
+      operationId: updateTask
+      summary: Edit task fields (creator only)
+      parameters:
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IfMatch'
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskPatch'
+      responses:
+        '200':
+          description: Updated task
+          headers:
+            ETag:
+              $ref: '../../../packages/api-client/openapi/common.yaml#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '403':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Forbidden'
+        '404':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/NotFound'
+        '409':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Conflict'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '428':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+
+  /tasks/{id}/status:
+    parameters:
+      - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/TaskId'
+    post:
+      tags: [tasks]
+      operationId: changeTaskStatus
+      summary: Change the status of an open task (either participant)
+      description: Blocked requires a reason. Done and Cancelled tasks must be reopened first.
+      parameters:
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IfMatch'
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StatusChange'
+      responses:
+        '200':
+          $ref: '#/components/responses/TaskUpdated'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '403':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Forbidden'
+        '404':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/NotFound'
+        '409':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Conflict'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '428':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+
+  /tasks/{id}/reopen:
+    parameters:
+      - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/TaskId'
+    post:
+      tags: [tasks]
+      operationId: reopenTask
+      summary: Reopen a Done (either participant) or Cancelled (creator) task to todo
+      parameters:
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IfMatch'
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reopen'
+      responses:
+        '200':
+          $ref: '#/components/responses/TaskUpdated'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '403':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Forbidden'
+        '404':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/NotFound'
+        '409':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Conflict'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '428':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+
+  /tasks/{id}/cancel:
+    parameters:
+      - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/TaskId'
+    post:
+      tags: [tasks]
+      operationId: cancelTask
+      summary: Cancel an open task (creator only); supersedes a pending deadline request
+      parameters:
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IfMatch'
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Cancel'
+      responses:
+        '200':
+          $ref: '#/components/responses/TaskUpdated'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '403':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Forbidden'
+        '404':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/NotFound'
+        '409':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Conflict'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '428':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+
+  /tasks/{id}/comments:
+    parameters:
+      - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/TaskId'
+    get:
+      tags: [comments]
+      operationId: listComments
+      summary: All retained comments in chronological order
+      parameters:
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/Limit'
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: One page of comments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentPage'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '404':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/NotFound'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+    post:
+      tags: [comments]
+      operationId: addComment
+      summary: Add a comment (either participant, including Done/Cancelled); no If-Match
+      parameters:
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommentCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '404':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/NotFound'
+        '409':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Conflict'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+
+  /tasks/{id}/history:
+    parameters:
+      - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/TaskId'
+    get:
+      tags: [history]
+      operationId: listHistory
+      summary: Immutable task history
+      parameters:
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/Limit'
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: One page of history entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoryPage'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '404':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/NotFound'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+
+  /tasks/{id}/attachments:
+    parameters:
+      - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/TaskId'
+    get:
+      tags: [attachments]
+      operationId: listAttachments
+      summary: Ready attachments only
+      parameters:
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/Limit'
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: One page of attachments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentPage'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '404':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/NotFound'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+    post:
+      tags: [attachments]
+      operationId: uploadAttachment
+      summary: Upload one file; 201 only after validated finalization
+      description: >
+        Repeating an Idempotency-Key returns the existing ready attachment, resumes a
+        recoverable stage, or returns 409 OPERATION_IN_PROGRESS; it never appends another file.
+      parameters:
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: At most 10,000,000 bytes.
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Attachment'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '404':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/NotFound'
+        '409':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Conflict'
+        '413':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/UnsupportedContent'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+
+  /tasks/{id}/attachments/{attachmentId}/content:
+    parameters:
+      - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/TaskId'
+      - name: attachmentId
+        in: path
+        required: true
+        schema:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Id'
+    get:
+      tags: [attachments]
+      operationId: downloadAttachment
+      summary: Stream file content; access is rechecked on every request
+      parameters:
+        - name: Range
+          in: header
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          $ref: '#/components/responses/AttachmentContent'
+        '206':
+          $ref: '#/components/responses/AttachmentContent'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '404':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/NotFound'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+
+  /tasks/{id}/deadline-requests:
+    parameters:
+      - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/TaskId'
+    get:
+      tags: [deadline-requests]
+      operationId: listDeadlineRequests
+      summary: All retained deadline requests
+      parameters:
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/Limit'
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: One page of deadline requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeadlineRequestPage'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '404':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/NotFound'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+    post:
+      tags: [deadline-requests]
+      operationId: submitDeadlineRequest
+      summary: Propose a new deadline (distinct current assignee of an open task)
+      parameters:
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IfMatch'
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeadlineRequestCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeadlineRequest'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '403':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Forbidden'
+        '404':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/NotFound'
+        '409':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Conflict'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '428':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+
+  /tasks/{id}/deadline-requests/{requestId}/approve:
+    parameters:
+      - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/TaskId'
+      - $ref: '#/components/parameters/RequestId'
+    post:
+      tags: [deadline-requests]
+      operationId: approveDeadlineRequest
+      summary: Approve a pending request (creator) and apply its date
+      parameters:
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IfMatch'
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveDeadlineRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/DeadlineRequestDecided'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '403':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Forbidden'
+        '404':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/NotFound'
+        '409':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Conflict'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '428':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+
+  /tasks/{id}/deadline-requests/{requestId}/decline:
+    parameters:
+      - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/TaskId'
+      - $ref: '#/components/parameters/RequestId'
+    post:
+      tags: [deadline-requests]
+      operationId: declineDeadlineRequest
+      summary: Decline a pending request (creator)
+      parameters:
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IfMatch'
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          $ref: '#/components/responses/DeadlineRequestDecided'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '403':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Forbidden'
+        '404':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/NotFound'
+        '409':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Conflict'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '428':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+
+  /tasks/{id}/deadline-requests/{requestId}/withdraw:
+    parameters:
+      - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/TaskId'
+      - $ref: '#/components/parameters/RequestId'
+    post:
+      tags: [deadline-requests]
+      operationId: withdrawDeadlineRequest
+      summary: Withdraw a pending request (original requester while current assignee)
+      parameters:
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IfMatch'
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          $ref: '#/components/responses/DeadlineRequestDecided'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '403':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Forbidden'
+        '404':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/NotFound'
+        '409':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Conflict'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '428':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: '../../../packages/api-client/openapi/common.yaml#/components/securitySchemes/bearerAuth'
+
+  parameters:
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      schema:
+        $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Id'
+
+  responses:
+    TaskUpdated:
+      description: Updated task
+      headers:
+        ETag:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/headers/ETag'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Task'
+    DeadlineRequestDecided:
+      description: The resolved request and the task after the decision
+      headers:
+        ETag:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/headers/ETag'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/DeadlineRequestDecision'
+    AttachmentContent:
+      description: >
+        File content with a sanitized attachment Content-Disposition, Cache-Control no-store
+        and X-Content-Type-Options nosniff. No reusable redirect.
+      headers:
+        Content-Disposition:
+          schema:
+            type: string
+        Cache-Control:
+          schema:
+            type: string
+            const: no-store
+        X-Content-Type-Options:
+          schema:
+            type: string
+            const: nosniff
+      content:
+        application/octet-stream:
+          schema:
+            type: string
+            format: binary
+
+  schemas:
+    TaskView:
+      type: string
+      enum: [assigned, created]
+    TaskStatus:
+      type: string
+      enum: [todo, in_progress, blocked, done, cancelled]
+    OpenStatus:
+      type: string
+      description: Statuses settable through POST /tasks/{id}/status.
+      enum: [todo, in_progress, blocked, done]
+    Priority:
+      type: string
+      enum: [low, normal, high]
+    DeadlineRequestState:
+      type: string
+      enum: [pending, approved, declined, withdrawn, superseded]
+    Title:
+      type: string
+      description: Trimmed, 1..200 characters.
+      minLength: 1
+      maxLength: 200
+    Description:
+      type: string
+      description: 0..20,000 characters.
+      maxLength: 20000
+    Reason:
+      type: string
+      description: Trimmed, 1..2,000 characters.
+      minLength: 1
+      maxLength: 2000
+
+    TaskPermissions:
+      type: object
+      description: What the caller may do now; advisory for the UI, enforced by the server.
+      additionalProperties: false
+      required: [edit, changeStatus, reopen, cancel, comment, upload, requestDeadline, decideDeadlineRequest]
+      properties:
+        edit:
+          type: boolean
+        changeStatus:
+          type: boolean
+        reopen:
+          type: boolean
+        cancel:
+          type: boolean
+        comment:
+          type: boolean
+        upload:
+          type: boolean
+        requestDeadline:
+          type: boolean
+        decideDeadlineRequest:
+          type: boolean
+    Task:
+      type: object
+      additionalProperties: false
+      required: [id, creator, assignee, title, description, priority, status, dueAt, dueTimeZone,
+                 blockedReason, cancellationReason, createdAt, updatedAt, completedAt, isOverdue,
+                 version, permissions]
+      properties:
+        id:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Id'
+        creator:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/UserSummary'
+        assignee:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/UserSummary'
+        title:
+          $ref: '#/components/schemas/Title'
+        description:
+          $ref: '#/components/schemas/Description'
+        priority:
+          $ref: '#/components/schemas/Priority'
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        dueAt:
+          description: Deadline instant; null together with dueTimeZone when there is no deadline.
+          oneOf:
+            - $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Timestamp'
+            - type: 'null'
+        dueTimeZone:
+          oneOf:
+            - $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/TimeZone'
+            - type: 'null'
+        blockedReason:
+          description: Present only while blocked.
+          oneOf:
+            - $ref: '#/components/schemas/Reason'
+            - type: 'null'
+        cancellationReason:
+          description: Present only when cancelled.
+          oneOf:
+            - $ref: '#/components/schemas/Reason'
+            - type: 'null'
+        createdAt:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Timestamp'
+        updatedAt:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Timestamp'
+        completedAt:
+          description: Present only when done.
+          oneOf:
+            - $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Timestamp'
+            - type: 'null'
+        isOverdue:
+          type: boolean
+          description: Computed from the current clock and open state; not persisted.
+        version:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Version'
+        permissions:
+          $ref: '#/components/schemas/TaskPermissions'
+    TaskCreate:
+      type: object
+      additionalProperties: false
+      required: [title, assigneeId]
+      description: dueAt and dueTimeZone are both set or both null.
+      properties:
+        title:
+          $ref: '#/components/schemas/Title'
+        assigneeId:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/UserId'
+        description:
+          $ref: '#/components/schemas/Description'
+        priority:
+          $ref: '#/components/schemas/Priority'
+        dueAt:
+          oneOf:
+            - $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Timestamp'
+            - type: 'null'
+        dueTimeZone:
+          oneOf:
+            - $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/TimeZone'
+            - type: 'null'
+        confirmPastDeadline:
+          type: boolean
+          default: false
+    TaskPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      description: >
+        Any of the editable fields. Setting dueAt and dueTimeZone to null together removes the
+        deadline. The version comes from If-Match.
+      properties:
+        title:
+          $ref: '#/components/schemas/Title'
+        description:
+          $ref: '#/components/schemas/Description'
+        priority:
+          $ref: '#/components/schemas/Priority'
+        assigneeId:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/UserId'
+        dueAt:
+          oneOf:
+            - $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Timestamp'
+            - type: 'null'
+        dueTimeZone:
+          oneOf:
+            - $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/TimeZone'
+            - type: 'null'
+        confirmPastDeadline:
+          type: boolean
+          default: false
+    StatusChange:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/OpenStatus'
+        reason:
+          description: Required when status is blocked.
+          $ref: '#/components/schemas/Reason'
+    Reopen:
+      type: object
+      additionalProperties: false
+      properties:
+        confirmPastDeadline:
+          type: boolean
+          default: false
+    Cancel:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          $ref: '#/components/schemas/Reason'
+    TaskPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+        nextCursor:
+          oneOf:
+            - $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Cursor'
+            - type: 'null'
+
+    UserPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/UserSummary'
+        nextCursor:
+          oneOf:
+            - $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Cursor'
+            - type: 'null'
+
+    Comment:
+      type: object
+      additionalProperties: false
+      required: [id, taskId, author, text, createdAt]
+      properties:
+        id:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Id'
+        taskId:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Id'
+        author:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/UserSummary'
+        text:
+          type: string
+          minLength: 1
+          maxLength: 10000
+        createdAt:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Timestamp'
+    CommentCreate:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text:
+          type: string
+          description: Trimmed nonempty, at most 10,000 characters.
+          minLength: 1
+          maxLength: 10000
+    CommentPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Comment'
+        nextCursor:
+          oneOf:
+            - $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Cursor'
+            - type: 'null'
+
+    HistoryChange:
+      type: object
+      additionalProperties: false
+      required: [field, previous, new]
+      description: Allowlisted previous/new values rendered as text.
+      properties:
+        field:
+          type: string
+        previous:
+          type: [string, 'null']
+        new:
+          type: [string, 'null']
+    HistoryEntry:
+      type: object
+      additionalProperties: false
+      required: [id, actor, type, occurredAt, changes]
+      properties:
+        id:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Id'
+        actor:
+          description: Null for system events (for example reminders).
+          oneOf:
+            - $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/UserSummary'
+            - type: 'null'
+        type:
+          type: string
+          maxLength: 64
+        occurredAt:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Timestamp'
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoryChange'
+        commentId:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Id'
+        attachmentId:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Id'
+        deadlineRequestId:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Id'
+    HistoryPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoryEntry'
+        nextCursor:
+          oneOf:
+            - $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Cursor'
+            - type: 'null'
+
+    Attachment:
+      type: object
+      additionalProperties: false
+      required: [id, taskId, name, contentType, sizeBytes, uploader, createdAt]
+      description: Ready attachments only. Storage keys are never exposed.
+      properties:
+        id:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Id'
+        taskId:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Id'
+        name:
+          type: string
+          description: Sanitized display filename.
+          minLength: 1
+          maxLength: 255
+        contentType:
+          type: string
+        sizeBytes:
+          type: integer
+          minimum: 1
+          maximum: 10000000
+        uploader:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/UserSummary'
+        createdAt:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Timestamp'
+    AttachmentPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Attachment'
+        nextCursor:
+          oneOf:
+            - $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Cursor'
+            - type: 'null'
+
+    DeadlineRequest:
+      type: object
+      additionalProperties: false
+      required: [id, taskId, requester, proposedDueAt, proposedTimeZone, reason, state, createdAt,
+                 resolvedAt, resolvedBy, version]
+      properties:
+        id:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Id'
+        taskId:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Id'
+        requester:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/UserSummary'
+        proposedDueAt:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Timestamp'
+        proposedTimeZone:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/TimeZone'
+        reason:
+          $ref: '#/components/schemas/Reason'
+        state:
+          $ref: '#/components/schemas/DeadlineRequestState'
+        createdAt:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Timestamp'
+        resolvedAt:
+          oneOf:
+            - $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Timestamp'
+            - type: 'null'
+        resolvedBy:
+          oneOf:
+            - $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/UserSummary'
+            - type: 'null'
+        version:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Version'
+    DeadlineRequestCreate:
+      type: object
+      additionalProperties: false
+      required: [proposedDueAt, proposedTimeZone, reason]
+      properties:
+        proposedDueAt:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Timestamp'
+        proposedTimeZone:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/TimeZone'
+        reason:
+          $ref: '#/components/schemas/Reason'
+    ApproveDeadlineRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        confirmPastDeadline:
+          type: boolean
+          default: false
+    DeadlineRequestDecision:
+      type: object
+      additionalProperties: false
+      required: [request, task]
+      properties:
+        request:
+          $ref: '#/components/schemas/DeadlineRequest'
+        task:
+          $ref: '#/components/schemas/Task'
+    DeadlineRequestPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeadlineRequest'
+        nextCursor:
+          oneOf:
+            - $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Cursor'
+            - type: 'null'

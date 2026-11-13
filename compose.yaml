@@ -1,0 +1,375 @@
+# Local demo environment. Host prerequisites: Docker Engine/Desktop and Compose only.
+#
+#   docker compose --profile tools run --rm setup      # once: generate secrets into .env
+#   docker compose up --wait                           # start and wait for health
+#   docker compose --profile tools run --rm demo-users # synthetic accounts
+#
+# Start order: Supabase -> db-bootstrap -> per-service migrate jobs -> runtime services -> edge.
+# Only the edge (and optional admin UIs) bind host ports, and only on 127.0.0.1.
+# Profiles: tools, test, security, email-capture, admin.
+
+name: task-management
+
+include:
+  - path: infra/supabase/compose.yaml
+    project_directory: .
+
+# Images are multi-arch (linux/amd64, linux/arm64); CI builds both platforms with buildx.
+# Local builds target the host architecture and work with or without BuildKit.
+x-java-build: &java-build
+  context: .
+  dockerfile: infra/containers/java-service.Dockerfile
+
+x-auth-env: &auth-env
+  # Exact issuer and audience; keys come from the internal JWKS endpoint, ES256 only.
+  AUTH_ISSUER: ${API_EXTERNAL_URL}
+  AUTH_AUDIENCE: authenticated
+  AUTH_JWKS_URI: http://auth:9999/.well-known/jwks.json
+
+services:
+  # ---------------------------------------------------------------- one-shot jobs
+  setup:
+    image: node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85
+    profiles: ["tools"]
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    entrypoint: ["/bin/sh", "/workspace/scripts/setup.sh"]
+
+  db-bootstrap:
+    build:
+      context: .
+      dockerfile: infra/containers/bootstrap.Dockerfile
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+      auth:
+        # auth.users must exist before the identity triggers are installed.
+        condition: service_healthy
+      realtime:
+        # Realtime's migrations create realtime.messages before its policy migration runs.
+        condition: service_healthy
+    environment:
+      PGHOST: ${POSTGRES_HOST}
+      PGPORT: ${POSTGRES_PORT}
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: supabase_admin
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      DEFAULT_TIME_ZONE: ${DEFAULT_TIME_ZONE}
+      IDENTITY_OWNER_PASSWORD: ${IDENTITY_OWNER_PASSWORD}
+      TASK_OWNER_PASSWORD: ${TASK_OWNER_PASSWORD}
+      TASK_APP_PASSWORD: ${TASK_APP_PASSWORD}
+      NOTIFICATION_OWNER_PASSWORD: ${NOTIFICATION_OWNER_PASSWORD}
+      NOTIFICATION_APP_PASSWORD: ${NOTIFICATION_APP_PASSWORD}
+
+  task-api-migrate:
+    image: task-management/task-api:local
+    build:
+      <<: *java-build
+      args:
+        MODULE: services/task-api
+    restart: "no"
+    command: ["migrate"]
+    depends_on:
+      db-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      MIGRATE_USERNAME: task_owner
+      MIGRATE_PASSWORD: ${TASK_OWNER_PASSWORD}
+
+  notifications-migrate:
+    image: task-management/notifications:local
+    build:
+      <<: *java-build
+      args:
+        MODULE: services/notifications
+    restart: "no"
+    command: ["migrate"]
+    depends_on:
+      db-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      MIGRATE_USERNAME: notification_owner
+      MIGRATE_PASSWORD: ${NOTIFICATION_OWNER_PASSWORD}
+
+  # ---------------------------------------------------------------- runtime services
+  task-api:
+    image: task-management/task-api:local
+    restart: unless-stopped
+    depends_on:
+      task-api-migrate:
+        condition: service_completed_successfully
+      api-gw:
+        condition: service_healthy
+      storage:
+        condition: service_healthy
+    environment:
+      <<: *auth-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: task_app
+      SPRING_DATASOURCE_PASSWORD: ${TASK_APP_PASSWORD}
+      DEFAULT_TIME_ZONE: ${DEFAULT_TIME_ZONE}
+      STORAGE_URL: http://api-gw:8000/storage/v1
+      STORAGE_BUCKET: ${ATTACHMENT_BUCKET}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY}
+      INTERNAL_NOTIFICATIONS_TOKEN: ${NOTIFICATIONS_TO_TASK_API_TOKEN}
+      OPERATOR_TOKEN: ${OPERATOR_TOKEN}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8081/actuator/health/readiness"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  notifications:
+    image: task-management/notifications:local
+    restart: unless-stopped
+    depends_on:
+      notifications-migrate:
+        condition: service_completed_successfully
+      task-api:
+        # Delivery degrades visibly without the task API; inbox reads fail closed (503).
+        condition: service_started
+    environment:
+      <<: *auth-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: notification_app
+      SPRING_DATASOURCE_PASSWORD: ${NOTIFICATION_APP_PASSWORD}
+      TASK_API_INTERNAL_URL: http://task-api:8080/internal/v1
+      TASK_API_TOKEN: ${NOTIFICATIONS_TO_TASK_API_TOKEN}
+      REALTIME_BROADCAST_URL: http://api-gw:8000/realtime/v1/api/broadcast
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_SENDER: ${SMTP_SENDER}
+      SITE_URL: ${SITE_URL}
+      OPERATOR_TOKEN: ${OPERATOR_TOKEN}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8081/actuator/health/readiness"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  gateway:
+    image: task-management/gateway:local
+    build:
+      <<: *java-build
+      args:
+        MODULE: services/gateway
+    restart: unless-stopped
+    depends_on:
+      api-gw:
+        condition: service_healthy
+      task-api:
+        condition: service_healthy
+      notifications:
+        # Optional for task operations; the inbox shows a visible error when unavailable.
+        condition: service_started
+    environment:
+      <<: *auth-env
+      ALLOWED_ORIGIN: ${SITE_URL}
+      SUPABASE_GATEWAY_URL: http://api-gw:8000
+      TASK_API_URL: http://task-api:8080
+      NOTIFICATIONS_URL: http://notifications:8080
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8081/actuator/health/readiness"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  web:
+    image: task-management/web:local
+    build:
+      context: .
+      dockerfile: infra/containers/web.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      gateway:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${EDGE_HTTP_PORT:-8080}:8080"
+    environment:
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/index.html"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------- tools profile
+  identity-reconcile:
+    image: task-management/identity-tools:local
+    build:
+      <<: *java-build
+      args:
+        MODULE: tools/identity
+    profiles: ["tools"]
+    command: ["reconcile", "--check"]
+    depends_on:
+      db-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      IDENTITY_DB_URL: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      IDENTITY_DB_USERNAME: identity_owner
+      IDENTITY_DB_PASSWORD: ${IDENTITY_OWNER_PASSWORD}
+      DEFAULT_TIME_ZONE: ${DEFAULT_TIME_ZONE}
+
+  demo-users:
+    image: task-management/identity-tools:local
+    profiles: ["tools"]
+    command: ["demo-users"]
+    depends_on:
+      db-bootstrap:
+        condition: service_completed_successfully
+      api-gw:
+        condition: service_healthy
+    environment:
+      AUTH_ADMIN_URL: http://api-gw:8000/auth/v1
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY}
+      # Operator-supplied password for every synthetic account; never printed.
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+
+  delivery-policy:
+    image: node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85
+    profiles: ["tools"]
+    working_dir: /workspace
+    volumes:
+      - ./scripts:/workspace/scripts:ro
+    entrypoint: ["/bin/sh", "/workspace/scripts/delivery-policy.sh"]
+    environment:
+      NOTIFICATIONS_URL: http://notifications:8080
+      OPERATOR_TOKEN: ${OPERATOR_TOKEN}
+
+  check-migrations:
+    image: alpine/git:v2.49.1@sha256:c0280cf9572316299b08544065d3bf35db65043d5e3963982ec50647d2746e26
+    profiles: ["tools"]
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:ro
+    environment:
+      MIGRATION_BASE_REF: ${MIGRATION_BASE_REF:-main}
+    entrypoint: ["/bin/sh", "-c", "git config --global --add safe.directory /workspace && sh /workspace/scripts/check-migrations.sh"]
+
+  seed-performance:
+    image: postgres:17-alpine
+    profiles: ["tools"]
+    volumes:
+      - ./tests/performance/fixtures:/fixtures:ro
+    entrypoint: ["/bin/sh", "/fixtures/seed-sc005.sh"]
+    depends_on:
+      db-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      PGHOST: ${POSTGRES_HOST}
+      PGPORT: ${POSTGRES_PORT}
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: supabase_admin
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+
+  # ---------------------------------------------------------------- test profile
+  # Node-based test services install into the `node-modules-linux` volume, so the container's
+  # Linux binaries never replace a host checkout's node_modules through the bind mount.
+  test-unit-web:
+    image: node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85
+    profiles: ["test"]
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - node-modules-linux:/workspace/node_modules
+      - node-modules-linux-web:/workspace/apps/web/node_modules
+      - node-modules-linux-api-client:/workspace/packages/api-client/node_modules
+    # Vitest + Testing Library + vitest-axe (WCAG 2.1 A/AA checks on every rendered state).
+    entrypoint: ["/bin/sh", "-c", "npm ci --no-audit --no-fund && npm run typecheck && npm run test:unit"]
+
+  # JUnit unit and PostgreSQL-backed Spring integration suites (Testcontainers); runs the web
+  # unit suite first. `docker compose --profile test run --rm test-unit` runs both.
+  test-unit:
+    image: maven:3.9-eclipse-temurin-25
+    profiles: ["test"]
+    working_dir: /workspace
+    depends_on:
+      test-unit-web:
+        condition: service_completed_successfully
+    volumes:
+      - .:/workspace
+      - maven-cache:/root/.m2
+      # Testcontainers starts PostgreSQL for the integration suites.
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    entrypoint: ["/bin/sh", "-c", "./mvnw -B verify"]
+
+  test-contract:
+    image: mcr.microsoft.com/playwright:v1.64.1-noble
+    profiles: ["test"]
+    working_dir: /workspace
+    depends_on:
+      web:
+        condition: service_healthy
+    volumes:
+      - .:/workspace
+      - node-modules-linux:/workspace/node_modules
+      - node-modules-linux-web:/workspace/apps/web/node_modules
+      - node-modules-linux-api-client:/workspace/packages/api-client/node_modules
+    environment:
+      BASE_URL: http://web:8080
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+    entrypoint: ["/bin/sh", "-c", "npm ci --no-audit --no-fund && npm run test:contract"]
+
+  # Playwright acceptance suites in Chromium, Firefox and WebKit with @axe-core/playwright.
+  test-e2e:
+    image: mcr.microsoft.com/playwright:v1.64.1-noble
+    profiles: ["test"]
+    working_dir: /workspace
+    depends_on:
+      web:
+        condition: service_healthy
+    volumes:
+      - .:/workspace
+      - node-modules-linux:/workspace/node_modules
+      - node-modules-linux-web:/workspace/apps/web/node_modules
+      - node-modules-linux-api-client:/workspace/packages/api-client/node_modules
+    environment:
+      BASE_URL: http://web:8080
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+    entrypoint: ["/bin/sh", "-c", "npm ci --no-audit --no-fund && npm run test:e2e"]
+
+  test-performance:
+    image: grafana/k6:1.3.0@sha256:3ddc8b1a33a2c3d8edc6e99b6a762ae36cba08788463458f5e6a7703e14eb77d
+    profiles: ["test"]
+    volumes:
+      - ./tests/performance:/scripts:ro
+    environment:
+      BASE_URL: http://web:8080
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+    depends_on:
+      web:
+        condition: service_healthy
+    command: ["run", "/scripts/task-management.js"]
+
+  # ---------------------------------------------------------------- email capture
+  email-capture:
+    image: axllent/mailpit:v1.31.6@sha256:23fe39e81bde596a918000b3135c0f85dc8bb4c9ea6be274b051143f3e300387
+    profiles: ["email-capture"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${EMAIL_CAPTURE_UI_PORT:-54324}:8025"
+    environment:
+      # Capture only: no relay to real recipients.
+      MP_SMTP_RELAY_HOST: ""
+      MP_MAX_MESSAGES: 5000
+
+volumes:
+  node-modules-linux:
+  node-modules-linux-web:
+  node-modules-linux-api-client:
+  maven-cache:

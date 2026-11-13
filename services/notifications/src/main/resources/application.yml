@@ -1,0 +1,69 @@
+server:
+  port: 8080
+  shutdown: graceful
+  error:
+    whitelabel:
+      enabled: false
+    include-stacktrace: never
+    include-message: never
+spring:
+  application:
+    name: notifications
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://db:5432/postgres}
+    username: ${SPRING_DATASOURCE_USERNAME:notification_app}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    hikari:
+      maximum-pool-size: 20
+      connection-timeout: 5000
+  flyway:
+    # Runtime role has no DDL; migrations run only in the `migrate` profile.
+    enabled: false
+  mvc:
+    problemdetails:
+      enabled: true
+management:
+  server:
+    # Private probes and metrics: not routed by the gateway or edge.
+    port: 8081
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+logging:
+  structured:
+    format:
+      console: logstash
+  level:
+    root: info
+    # Never log request bodies, SQL parameters or headers.
+    org.springframework.web: warn
+    org.springframework.jdbc: warn
+auth:
+  issuer: ${AUTH_ISSUER:http://localhost:8080/auth/v1}
+  audience: ${AUTH_AUDIENCE:authenticated}
+  jwks-uri: ${AUTH_JWKS_URI:http://auth:9999/.well-known/jwks.json}
+internal:
+  callers:
+    operator:
+      token: ${OPERATOR_TOKEN:}
+      scopes: [operator]
+task-api:
+  internal-url: ${TASK_API_INTERNAL_URL:http://task-api:8080/internal/v1}
+  token: ${TASK_API_TOKEN:}
+realtime:
+  broadcast-url: ${REALTIME_BROADCAST_URL:http://api-gw:8000/realtime/v1/api/broadcast}
+  secret-key: ${SUPABASE_SECRET_KEY:}
+email:
+  smtp-host: ${SMTP_HOST:email-capture}
+  smtp-port: ${SMTP_PORT:1025}
+  sender: ${SMTP_SENDER:tasks@demo.invalid}
+  site-url: ${SITE_URL:http://localhost:8080}

@@ -46,3 +46,15 @@ logs/
 .cache/
 tmp/
 temp/
+
+# Generated runtime secrets and keys (scripts/setup.sh)
+.runtime/
+*.pem
+*.key
+
+# Build, test and scanner output
+target/
+reports/
+playwright-report/
+test-results/
+blob-report/

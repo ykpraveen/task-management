@@ -1,0 +1,18 @@
+spring:
+  main:
+    web-application-type: none
+    banner-mode: off
+  datasource:
+    url: ${IDENTITY_DB_URL:jdbc:postgresql://db:5432/postgres}
+    username: ${IDENTITY_DB_USERNAME:identity_owner}
+    password: ${IDENTITY_DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 2
+      initialization-fail-timeout: -1
+logging:
+  level:
+    root: warn
+identity:
+  auth-admin-url: ${AUTH_ADMIN_URL:http://kong:8000/auth/v1}
+  secret-key: ${SUPABASE_SECRET_KEY:}
+  demo-password: ${DEMO_PASSWORD:}

@@ -1,0 +1,165 @@
+openapi: 3.1.0
+info:
+  title: Notifications API
+  version: 1.0.0
+  description: >
+    Public in-app inbox (specs/001-task-delegation/contracts/http-api.md, "Notifications API").
+    Entries and counts include only tasks the caller can currently access, checked through the
+    task-owned authorization operation; when that check is unavailable the service fails closed
+    with 503. Entries never contain task text.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: notifications
+
+paths:
+  /notifications:
+    get:
+      tags: [notifications]
+      operationId: listNotifications
+      summary: The caller's currently accessible inbox entries, newest first
+      parameters:
+        - name: unreadOnly
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/Limit'
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: One page of entries; no totals that could leak hidden entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPage'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+
+  /notifications/unread-count:
+    get:
+      tags: [notifications]
+      operationId: getUnreadCount
+      summary: Unread entries, excluding entries whose task access was revoked
+      responses:
+        '200':
+          description: The count
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnreadCount'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+
+  /notifications/{id}/read:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Another user's entry is indistinguishable from an unknown one (404).
+        schema:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Id'
+    post:
+      tags: [notifications]
+      operationId: markNotificationRead
+      summary: Mark the caller's own entry read; replaying is idempotent
+      parameters:
+        - $ref: '../../../packages/api-client/openapi/common.yaml#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The entry with its first read time
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '401':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Unauthenticated'
+        '404':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/NotFound'
+        '409':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/Conflict'
+        '422':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/ValidationFailed'
+        '429':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/RateLimited'
+        '503':
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/responses/DependencyUnavailable'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: '../../../packages/api-client/openapi/common.yaml#/components/securitySchemes/bearerAuth'
+
+  schemas:
+    NotificationType:
+      type: string
+      description: Generic event type (contracts/delivery.md, "Durable task events").
+      enum:
+        - assigned
+        - reassigned
+        - comment_added
+        - file_added
+        - deadline_changed
+        - deadline_removed
+        - status_changed
+        - blocked
+        - cancelled
+        - reopened
+        - deadline_request_submitted
+        - deadline_request_approved
+        - deadline_request_declined
+        - deadline_request_withdrawn
+        - deadline_request_superseded
+        - due_soon
+        - overdue
+    Notification:
+      type: object
+      additionalProperties: false
+      required: [id, type, taskId, createdAt, readAt]
+      properties:
+        id:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Id'
+        type:
+          $ref: '#/components/schemas/NotificationType'
+        taskId:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Id'
+        createdAt:
+          $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Timestamp'
+        readAt:
+          oneOf:
+            - $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Timestamp'
+            - type: 'null'
+    NotificationPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+        nextCursor:
+          oneOf:
+            - $ref: '../../../packages/api-client/openapi/common.yaml#/components/schemas/Cursor'
+            - type: 'null'
+    UnreadCount:
+      type: object
+      additionalProperties: false
+      required: [count]
+      properties:
+        count:
+          type: integer
+          minimum: 0
