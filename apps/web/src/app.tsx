@@ -1,4 +1,4 @@
-import type { ApiClients } from '@task-management/api-client';
+import { tryParseId, type ApiClients } from '@task-management/api-client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   Link,
@@ -7,6 +7,7 @@ import {
   createRootRouteWithContext,
   createRoute,
   createRouter,
+  notFound,
   redirect,
   useRouteContext,
   useRouter,
@@ -18,6 +19,9 @@ import { RouteFocus } from './a11y/RouteFocus';
 import { ProfileSettings, TimeZoneOffer } from './auth/ProfileSettings';
 import { SignIn } from './auth/SignIn';
 import { SIGN_IN_PATH, requireSession, safeRedirectTarget, useCurrentUser, type SessionController } from './auth/session';
+import { TaskDetails } from './features/tasks/TaskDetails';
+import { TaskForm } from './features/tasks/TaskForm';
+import { TaskList } from './features/tasks/TaskList';
 
 export interface RouterContext {
   queryClient: QueryClient;
@@ -124,7 +128,17 @@ function SignInPage() {
 }
 
 function HomePage() {
-  return <h1>My tasks</h1>;
+  const { api, session } = homeRoute.useRouteContext();
+  return (
+    <>
+      <h1>My tasks</h1>
+      <p>
+        <Link to="/tasks/new">New task</Link>
+      </p>
+      <TaskList api={api} session={session} view="assigned" />
+      <TaskList api={api} session={session} view="created" />
+    </>
+  );
 }
 
 function NotFoundPage() {
@@ -173,6 +187,45 @@ const homeRoute = createRoute({
   staticData: { title: 'My tasks' },
 });
 
+function NewTaskPage() {
+  const { api, session } = newTaskRoute.useRouteContext();
+  const router = useRouter();
+  return (
+    <>
+      <h1>New task</h1>
+      <TaskForm
+        api={api}
+        session={session}
+        onSaved={(task) => void router.navigate({ to: '/tasks/$taskId', params: { taskId: task.id } })}
+      />
+    </>
+  );
+}
+
+const newTaskRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/tasks/new',
+  component: NewTaskPage,
+  staticData: { title: 'New task' },
+});
+
+function TaskPage() {
+  const { api, session } = taskRoute.useRouteContext();
+  const { taskId } = taskRoute.useParams();
+  return <TaskDetails key={taskId} api={api} session={session} taskId={taskId} />;
+}
+
+const taskRoute = createRoute({
+  getParentRoute: () => authenticatedRoute,
+  path: '/tasks/$taskId',
+  // IDs stay canonical decimal strings; anything else is not a task URL.
+  beforeLoad: ({ params }) => {
+    if (!tryParseId(params.taskId)) throw notFound();
+  },
+  component: TaskPage,
+  staticData: { title: 'Task details' },
+});
+
 function ProfilePage() {
   const { session } = profileRoute.useRouteContext();
   return <ProfileSettings session={session} />;
@@ -185,7 +238,10 @@ const profileRoute = createRoute({
   staticData: { title: 'Profile settings' },
 });
 
-const routeTree = rootRoute.addChildren([signInRoute, authenticatedRoute.addChildren([homeRoute, profileRoute])]);
+const routeTree = rootRoute.addChildren([
+  signInRoute,
+  authenticatedRoute.addChildren([homeRoute, newTaskRoute, taskRoute, profileRoute]),
+]);
 
 export interface AppRouterOptions extends RouterContext {
   history?: RouterHistory;
