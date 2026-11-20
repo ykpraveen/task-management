@@ -238,7 +238,8 @@ describe('TaskForm: assignee combobox', () => {
     await user.type(assignee, 'Avery');
     expect(await screen.findByText(resultCountMessage(2))).toHaveAttribute('role', 'status');
     expect(assignee).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getAllByRole('option')).toHaveLength(2);
+    // Scoped to the listbox: the native Priority and Time zone selects have options too.
+    expect(within(screen.getByRole('listbox', { name: 'Assignee' })).getAllByRole('option')).toHaveLength(2);
     expect(await axe(container)).toHaveNoViolations();
 
     await user.keyboard('{ArrowDown}{Enter}');
