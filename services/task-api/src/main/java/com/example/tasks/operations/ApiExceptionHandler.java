@@ -5,7 +5,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.TransientDataAccessException;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -22,14 +25,21 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
  * Maps every failure to application/problem+json. Never returns stack traces, SQL or task
  * text; unexpected failures are logged with the request ID and exception type only.
  */
+// Ahead of Spring's built-in problem-details handler, so contract codes (422, 428) win.
+@Order(Ordered.HIGHEST_PRECEDENCE)
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
+    /** A stale-version conflict also carries the current version as the ETag, for participants only. */
     @ExceptionHandler(ApiException.class)
-    ProblemDetail api(ApiException e) {
-        return ProblemResponses.problem(e);
+    ResponseEntity<ProblemDetail> api(ApiException e) {
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(e.code().status());
+        if (e.extensions().get("currentVersion") instanceof String version) {
+            response.eTag("\"" + version + "\"");
+        }
+        return response.body(ProblemResponses.problem(e));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

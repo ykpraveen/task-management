@@ -1,0 +1,47 @@
+# Spec Kit extension hooks.
+#
+# Each /speckit-<command> skill reads hooks.before_<command> before it starts and
+# hooks.after_<command> before it reports completion. A hook entry has:
+#
+#   extension:   name shown to the user
+#   command:     dotted command id; dots become hyphens when invoked
+#                (speckit.git.commit -> /speckit-git-commit)
+#   description: one line describing the hook
+#   prompt:      text shown for optional hooks
+#   optional:    true  = suggested to the user, not run
+#                false = run automatically, and the command waits for it
+#   enabled:     false disables the hook (default true)
+#   condition:   non-empty means the hook is left to the HookExecutor and skipped
+#                by the skill itself
+#
+# Example (disabled):
+#
+#   after_implement:
+#     - extension: git
+#       command: speckit.git.commit
+#       description: Commit the completed tasks
+#       prompt: Commit the work from this implementation run?
+#       optional: true
+#       enabled: false
+
+hooks:
+  before_constitution: []
+  after_constitution: []
+  before_specify: []
+  after_specify: []
+  before_clarify: []
+  after_clarify: []
+  before_plan: []
+  after_plan: []
+  before_checklist: []
+  after_checklist: []
+  before_tasks: []
+  after_tasks: []
+  before_analyze: []
+  after_analyze: []
+  before_converge: []
+  after_converge: []
+  before_implement: []
+  after_implement: []
+  before_taskstoissues: []
+  after_taskstoissues: []
